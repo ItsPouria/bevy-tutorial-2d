@@ -24,6 +24,7 @@ fn main() {
                 (update_enemy_direction, confine_enemy_movement).chain(),
             ),
         )
+        .add_systems(Update, enemy_hit_player)
         .run();
 }
 
@@ -201,18 +202,15 @@ pub fn update_enemy_direction(
         }
 
         if direction_changed {
-            // let sound_effect_1 = asset_server.load("audio/pluck_001.ogg");
-            // let sounds_effect_2 = asset_server.load("audio/pluck_002.ogg");
-            // let sound_effect = if random::<f32>() > 0.5 {
-            //     sound_effect_1
-            // } else {
-            //     sounds_effect_2
-            // };
+            let sound_effect_1 = asset_server.load("audio/pluck_001.ogg");
+            let sounds_effect_2 = asset_server.load("audio/pluck_002.ogg");
+            let sound_effect = if random::<f32>() > 0.5 {
+                sound_effect_1
+            } else {
+                sounds_effect_2
+            };
 
-            commands.spawn((
-                AudioPlayer::new(asset_server.load("audio/pluck_001.ogg")),
-                PlaybackSettings::LOOP,
-            ));
+            commands.spawn((AudioPlayer::new(sound_effect), PlaybackSettings::ONCE));
             println!("played sound did you hear it????")
         }
     }
@@ -248,5 +246,30 @@ pub fn confine_enemy_movement(
         }
 
         transform.translation = translation;
+    }
+}
+
+pub fn enemy_hit_player(
+    mut commands: Commands,
+    mut player_query: Query<(Entity, &Transform), With<Player>>,
+    enemy_query: Query<&Transform, With<Enemy>>,
+    asset_server: Res<AssetServer>,
+) {
+    if let Ok((player_entity, player_transform)) = player_query.single_mut() {
+        for enemy_transform in enemy_query.iter() {
+            let distance = player_transform
+                .translation
+                .distance(enemy_transform.translation);
+            let player_radius = PLAYER_SIZE / 2.0;
+            let enemy_radius = ENEMY_SIZE / 2.0;
+            if distance < player_radius + enemy_radius {
+                println!("Enemy hit player! Game over!");
+                commands.spawn((
+                    AudioPlayer::new(asset_server.load("audio/explosionCrunch_000.ogg")),
+                    PlaybackSettings::ONCE,
+                ));
+                commands.entity(player_entity).despawn();
+            }
+        }
     }
 }
