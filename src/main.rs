@@ -9,6 +9,9 @@ pub struct Enemy {
     pub direction: Vec2,
 }
 
+#[derive(Component)]
+pub struct Star {}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -17,11 +20,17 @@ fn main() {
         .add_systems(Update, player_movement)
         .add_systems(Update, confine_player_movement)
         .add_systems(Startup, spawn_enemy)
+        .add_systems(Startup, spawn_stars)
         .add_systems(
             Update,
             (
                 enemy_movement,
-                (update_enemy_direction, confine_enemy_movement).chain(),
+                (
+                    update_enemy_direction,
+                    confine_enemy_movement,
+                    enemy_hit_player,
+                )
+                    .chain(),
             ),
         )
         .run();
@@ -89,6 +98,29 @@ pub fn spawn_enemy(
     }
 }
 
+pub const NUMBER_OF_STARS: usize = 10;
+
+pub fn spawn_stars(
+    mut commands: Commands,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+    asset_server: Res<AssetServer>,
+) {
+    let window = window_query.single().unwrap();
+    for _ in 0..NUMBER_OF_STARS {
+        let random_x = random::<f32>() * window.width();
+        let random_y = random::<f32>() * window.height();
+
+        commands.spawn((
+            Sprite {
+                image: asset_server.load("sprite/star.png"),
+                ..default()
+            },
+            Transform::from_xyz(random_x, random_y, 0.0),
+            Star {},
+        ));
+    }
+}
+
 pub const PLAYER_SPEED: f32 = 500.0;
 
 pub fn player_movement(
@@ -128,7 +160,7 @@ pub fn player_movement(
 }
 
 pub const PLAYER_SIZE: f32 = 64.0; //This is the player sprite size
-                                   //
+//
 pub fn confine_player_movement(
     mut player_query: Query<&mut Transform, With<Player>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
@@ -201,17 +233,9 @@ pub fn update_enemy_direction(
         }
 
         if direction_changed {
-            // let sound_effect_1 = asset_server.load("audio/pluck_001.ogg");
-            // let sounds_effect_2 = asset_server.load("audio/pluck_002.ogg");
-            // let sound_effect = if random::<f32>() > 0.5 {
-            //     sound_effect_1
-            // } else {
-            //     sounds_effect_2
-            // };
-
             commands.spawn((
                 AudioPlayer::new(asset_server.load("audio/pluck_001.ogg")),
-                PlaybackSettings::LOOP,
+                PlaybackSettings::ONCE,
             ));
             println!("played sound did you hear it????")
         }
@@ -248,5 +272,30 @@ pub fn confine_enemy_movement(
         }
 
         transform.translation = translation;
+    }
+}
+
+pub fn enemy_hit_player(
+    mut commands: Commands,
+    mut player_query: Query<(Entity, &Transform), With<Player>>,
+    enemy_query: Query<&Transform, With<Enemy>>,
+    asset_server: Res<AssetServer>,
+) {
+    if let Ok((player_entity, player_transform)) = player_query.single_mut() {
+        for enemy_transform in enemy_query.iter() {
+            let distance = player_transform
+                .translation
+                .distance(enemy_transform.translation);
+            let player_radius = PLAYER_SIZE / 2.0;
+            let enemy_radius = ENEMY_SIZE / 2.0;
+            if distance < player_radius + enemy_radius {
+                println!("Enemy hit player! Game over!");
+                commands.spawn((
+                    AudioPlayer::new(asset_server.load("audio/explosionCrunch_001.ogg")),
+                    PlaybackSettings::ONCE,
+                ));
+                commands.entity(player_entity).despawn();
+            }
+        }
     }
 }
